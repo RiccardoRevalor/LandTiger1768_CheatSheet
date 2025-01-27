@@ -20,13 +20,15 @@
   - [Calculating Timer Counter](#calculating-the-timer-counter)
   - [Timer header](#timer-header-file)
   - [Timer initialization](#timers-initialization-enable-disable-reset)
+  - [init_timer Advanced Version!](#init_timer-advanced-version)
   - [Timer IRQHandler](#timer-irqhandler)
   - [Retrieve Counter Value](#retrieve-timer-counter-value)
 
 - 🕒 [RIT Timer](#rit-timer)
   - [RIT header](#rit-header-file)
   - [RIT initialization](#rit-initialization-enable-disable-reset)
-  - [RIT IRQHandler](#rit_irqhandler)
+  - [Full Complete RIT IRQHandler](#rit_irqhandler)
+  - [Retrieve RIT Counter Value](#retrieve-rit-counter-value)
 
 - 🕒 [SYSTICK Timer (Assembly only)](#systick-timer-assembly-only)
   - [SYSTICK Registers Contants](#systick-registers-constants)
@@ -58,7 +60,8 @@
 - 💻 [LCD and Touch Screen](#lcd-and-touch-screen)
   - [LCD Initialization and Configuration](#lcd-initialization-and-configuration)
   - [LCD Clear](#lcd-clear)
-
+  - [LCD Useful Functions](#lcd-useful-functions)
+  
 - [Resources](#resources)  
 
 
@@ -121,6 +124,7 @@ void LED_deinit(void) {
 **LD4 -> LED_On(7)** </br>
 **LD11 -> LED_On(0)** </br>
 **LED_Out(...) also works this way, showing the result from LD11 (LSB) to LD4 (MSB)** </br>
+**For displaying values in the reverese order (from LD4 (LSB) to LD11 (MSB)) use the custom function LED_Out_reverse(...)** </br>
 ```c
 #include "lpc17xx.h"
 #include "led.h"
@@ -150,6 +154,52 @@ void LED_Out(unsigned int value) {
     }
   }
 	led_value = value;
+}
+
+void LED_Out_reverse(unsigned int value) {
+  int i;
+
+  for (i = LED_NUM; i >= 0; i--) {
+    if (value & (1<<i)) {
+      LED_On (LED_NUM-i-1);
+    } else {
+      LED_Off(i);
+    }
+  }
+	led_value = value;
+}
+
+void LED_OnAll(void)
+{
+	int i;
+	for (i = 0; i < LED_NUM; i++)
+	{
+		LED_On(i);
+	}
+}
+
+void LED_OffAll(void)
+{
+	int i;
+	for (i = 0; i < LED_NUM; i++)
+	{
+		LED_Off(i);
+	}
+}
+
+void LED_Out_Range(unsigned int value, uint8_t from_led_num, uint8_t to_led_num){
+	int i;
+	int j;
+	if (to_led_num < from_led_num || to_led_num >= LED_NUM) return;
+	
+  for (i = from_led_num, j=0; i <= to_led_num; i++,j++) {
+    if (value & (1<<j)) {
+      LED_On (i);
+    } else {
+      LED_Off(i);
+    }
+  }
+	led_value = LPC_GPIO2->FIOPIN;
 }
 ```
 
@@ -197,7 +247,7 @@ void BUTTON_init(void) {
 }
 ```
 
-### Buttons IRQ Handlers
+### Buttons IRQ Handlers 
 #### File: `IRQ_button.c`
 
 ```c
@@ -206,23 +256,68 @@ void BUTTON_init(void) {
 
 #include "../led/led.h" 					
 
-void EINT0_IRQHandler (void)	  	/* INT0														 */
+extern int down_0;
+extern int down_1;
+extern int down_2;
+
+
+void EINT0_IRQHandler (void)	  	// INT0
 {		
+	down_0 = 1;
+	NVIC_DisableIRQ(EINT0_IRQn);											
+	LPC_PINCON->PINSEL4    &= ~(1 << 20);     				
 	
-	LPC_SC->EXTINT &= (1 << 0);     /* clear pending interrupt         */
+	LPC_SC->EXTINT &= (1 << 0);     									
 }
 
 
-void EINT1_IRQHandler (void)	  	/* KEY1														 */
+void EINT1_IRQHandler (void)	  	// KEY1	
 {
+	down_1 = 1;
+	NVIC_DisableIRQ(EINT1_IRQn);											
+	LPC_PINCON->PINSEL4    &= ~(1 << 22);     				
 	
-	LPC_SC->EXTINT &= (1 << 1);     /* clear pending interrupt         */
+	LPC_SC->EXTINT &= (1 << 1);     									
 }
 
-void EINT2_IRQHandler (void)	  	/* KEY2														 */
+void EINT2_IRQHandler (void)	  	// KEY2
 {
+	down_2 = 1;
+	NVIC_DisableIRQ(EINT2_IRQn);											
+	LPC_PINCON->PINSEL4    &= ~(1 << 24);    	 			
 	
-  LPC_SC->EXTINT &= (1 << 2);     /* clear pending interrupt         */    
+	LPC_SC->EXTINT &= (1 << 2);     								  
+}
+
+
+void disable_INT0(){
+	NVIC_DisableIRQ(EINT0_IRQn);											
+	LPC_PINCON->PINSEL4    &= ~(1 << 20);     				
+}
+
+void disable_KEY1(){
+	NVIC_DisableIRQ(EINT1_IRQn);											
+	LPC_PINCON->PINSEL4    &= ~(1 << 22);     				
+}
+
+void disable_KEY2(){
+	NVIC_DisableIRQ(EINT2_IRQn);										
+	LPC_PINCON->PINSEL4    &= ~(1 << 24);    	 			
+}
+
+void enable_INT0(){
+	NVIC_EnableIRQ(EINT0_IRQn);							 			 
+	LPC_PINCON->PINSEL4    |= (1 << 20);     			 
+}
+
+void enable_KEY1(){
+	NVIC_EnableIRQ(EINT1_IRQn);							 			 
+	LPC_PINCON->PINSEL4    |= (1 << 22);     			 
+}
+
+void enable_KEY2(){
+	NVIC_EnableIRQ(EINT2_IRQn);							 			 
+	LPC_PINCON->PINSEL4    |= (1 << 24);     			 
 }
 ```
 
@@ -283,6 +378,16 @@ And so on for the other MR, by using higher bits (bit 3,4,5 for MR1 etc)
 #include "LPC17xx.h"
 #include "timer.h"
 
+//	Stop	Reset	Interrupt
+//	0			0			0			= 0
+//	0			0			1			= 1
+//	0			1			0			= 2
+//  0			1			1			= 3
+//	1			0			0			= 4
+//	1			0			1			= 5
+//	1			1			0			= 6
+//	1			1			1			= 7
+
 uint32_t init_timer ( uint8_t timer_num, uint32_t TimerInterval )
 {
   if ( timer_num == 0 ) {
@@ -342,9 +447,125 @@ void reset_timer( uint8_t timer_num )
   }
   return;
 }
-
-
 ```
+
+### init_timer Advanced version!
+```c
+//	Stop	Reset	Interrupt
+//	0			0			0			= 0
+//	0			0			1			= 1
+//	0			1			0			= 2
+//  0			1			1			= 3
+//	1			0			0			= 4
+//	1			0			1			= 5
+//	1			1			0			= 6
+//	1			1			1			= 7
+uint32_t init_timer( uint8_t timer_num, uint32_t Prescaler, uint8_t MatchReg, uint8_t SRImatchReg, uint32_t TimerInterval )
+{
+  if ( timer_num == 0 )
+  {
+		LPC_TIM0-> PR = Prescaler;
+		
+		if (MatchReg == 0){
+			LPC_TIM0->MR0 = TimerInterval;
+			LPC_TIM0->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 1){
+			LPC_TIM0->MR1 = TimerInterval;
+			LPC_TIM0->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 2){
+			LPC_TIM0->MR2 = TimerInterval;
+			LPC_TIM0->MCR |= SRImatchReg << 3*MatchReg;	
+		}
+		else if (MatchReg == 3){
+			LPC_TIM0->MR3 = TimerInterval;
+			LPC_TIM0->MCR |= SRImatchReg << 3*MatchReg;	
+		}
+	NVIC_EnableIRQ(TIMER0_IRQn);				/* enable timer interrupts*/
+	NVIC_SetPriority(TIMER0_IRQn, 0);		/* more priority than buttons */
+	return (0);
+  }
+  else if ( timer_num == 1 )
+  {
+		LPC_TIM1-> PR = Prescaler;
+		
+		if (MatchReg == 0){
+			LPC_TIM1->MR0 = TimerInterval;
+			LPC_TIM1->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 1){
+			LPC_TIM1->MR1 = TimerInterval;
+			LPC_TIM1->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 2){
+			LPC_TIM1->MR2 = TimerInterval;
+			LPC_TIM1->MCR |= SRImatchReg << 3*MatchReg;	
+		}
+		else if (MatchReg == 3){
+			LPC_TIM1->MR3 = TimerInterval;
+			LPC_TIM1->MCR |= SRImatchReg << 3*MatchReg;	
+		}		
+	NVIC_EnableIRQ(TIMER1_IRQn);
+	NVIC_SetPriority(TIMER1_IRQn, 0);	/* less priority than buttons and timer0*/
+	return (0);
+  }
+// TIMER 2
+	  else if ( timer_num == 2 )
+  {
+		LPC_TIM2-> PR = Prescaler;
+		
+		if (MatchReg == 0){
+			LPC_TIM2->MR0 = TimerInterval;
+			LPC_TIM2->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 1){
+			LPC_TIM2->MR1 = TimerInterval;
+			LPC_TIM2->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 2){
+			LPC_TIM2->MR2 = TimerInterval;
+			LPC_TIM2->MCR |= SRImatchReg << 3*MatchReg;	
+		}
+		else if (MatchReg == 3){
+			LPC_TIM2->MR3 = TimerInterval;
+			LPC_TIM2->MCR |= SRImatchReg << 3*MatchReg;	
+		}		
+	NVIC_EnableIRQ(TIMER2_IRQn);
+	NVIC_SetPriority(TIMER2_IRQn, 0);	/* less priority than buttons and timer0*/
+	return (0);
+  }
+// TIMER 3
+	  else if ( timer_num == 3 )
+  {
+		LPC_TIM3-> PR = Prescaler;
+		
+		if (MatchReg == 0){
+			LPC_TIM3->MR0 = TimerInterval;
+			LPC_TIM3->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 1){
+			LPC_TIM3->MR1 = TimerInterval;
+			LPC_TIM3->MCR |= SRImatchReg << 3*MatchReg;			
+		}
+		else if (MatchReg == 2){
+			LPC_TIM3->MR2 = TimerInterval;
+			LPC_TIM3->MCR |= SRImatchReg << 3*MatchReg;	
+		}
+		else if (MatchReg == 3){
+			LPC_TIM3->MR3 = TimerInterval;
+			LPC_TIM3->MCR |= SRImatchReg << 3*MatchReg;	
+		}		
+	NVIC_EnableIRQ(TIMER3_IRQn);
+	NVIC_SetPriority(TIMER3_IRQn, 0);	/* less priority than buttons and timer0*/
+	return (0);
+  }
+
+  return (1);
+```
+
+
+
 ### TIMER IRQHandler
 Handler for TIMER0 as example:
 
@@ -368,6 +589,54 @@ For example for Timer0:
 ```c
 //after having imported: #include "LPC17xx.h" 
 LPC_TIM0->TC; //32 bit
+```
+
+A function that does that:
+```c
+unsigned int get_timer_value(uint8_t timer_num) {
+	if ( timer_num == 0 )
+	{
+		return LPC_TIM0->TC;
+	}
+	else if (timer_num == 1)
+	{
+		return LPC_TIM1->TC;
+	}
+	else if (timer_num == 2)
+	{
+		return LPC_TIM2->TC;
+	}
+	else if (timer_num == 3)
+	{
+		return LPC_TIM3->TC;
+	}
+	return -1;
+}
+```
+
+A function that retrieves the timer value **IN SECONDS**:
+```c
+//put these constants in timer.h or at the beginning of the file
+#define TIMER0_FREQ 25000000
+#define TIMER1_FREQ 25000000
+#define TIMER2_FREQ 25000000
+#define TIMER3_FREQ 25000000
+
+
+float get_timer_value_in_sec(uint8_t timer_num) {
+    switch (timer_num) {
+        case 0:
+            return (float) (LPC_TIM0->TC) / TIMER0_FREQ;
+        case 1:
+            return (float) (LPC_TIM1->TC) / TIMER1_FREQ;
+        case 2:
+            return (float) (LPC_TIM2->TC) / TIMER2_FREQ;
+        case 3:
+            return (float) (LPC_TIM3->TC) / TIMER3_FREQ;
+        default:
+            return -1; 
+    }
+}
 ```
 
 ## RIT Timer
@@ -441,7 +710,362 @@ uint32_t init_RIT ( uint32_t RITInterval )
 
 ### RIT_IRQHandler()
 #### File:  `IRQ_RIT.c` 
-You can put whatever you want to perform the actions at every interval of the RIT.
+Full Complete Handler:
+```c
+#include "LPC17xx.h"
+#include "RIT.h"
+#include "../led/led.h"
+
+/* User Imports */
+
+//#include "../main/user_RIT.h"
+
+	/* Variabili Globali Gestione De-Bouncing */
+	
+volatile int down_0 = 0;
+volatile int down_1 = 0;
+volatile int down_2 = 0;
+volatile int toRelease_down_0 = 0;
+volatile int toRelease_down_1 = 0;
+volatile int toRelease_down_2 = 0;
+
+volatile int J_up = 0;
+volatile int J_down = 0;
+volatile int J_right = 0;
+volatile int J_left = 0;
+volatile int J_click = 0;
+volatile int J_up_left = 0;
+volatile int J_up_right = 0;
+volatile int J_down_left = 0;
+volatile int J_down_right = 0;
+	/* Variabili Globali */
+
+int const long_press_count_1 = 3;		// => count = x / 50ms ; where x = time long press, 50 ms = RIT_Interval
+//int const long_press_count_2 = 0;
+
+void RIT_IRQHandler(void) 
+{			
+	
+	/* INT0 */
+	
+	if(down_0 !=0) {			/* INT0 */
+		down_0++;
+		if((LPC_GPIO2->FIOPIN & (1<<10)) == 0){ /* button premuto */
+			switch(down_0) {
+				case 2:				
+					// short press
+				  // your_code	
+					toRelease_down_0 = 1;
+				
+					break;
+				case long_press_count_1:					
+					// your code here (for long press)		
+					break;
+				default:
+					break;
+			}
+		}
+		else {	/* button released */
+			if(toRelease_down_0){
+				//add code to manage release.
+				toRelease_down_0=0;
+			}
+			down_0=0;			
+			NVIC_EnableIRQ(EINT0_IRQn);							 			 /* disable Button interrupts			*/
+			LPC_PINCON->PINSEL4    |= (1 << 20);     			 /* External interrupt 0 pin selection   */
+		}
+	} 	// end INT0
+
+	///////////////////////////////////////////////////////////////////
+	
+	/* KEY1 */
+	
+	if(down_1 !=0) {			/* KEY1 */
+		down_1++;
+		if((LPC_GPIO2->FIOPIN & (1<<11)) == 0){ /* button premuto */
+			switch(down_1){
+				case 2:
+					// short press
+					// your code here
+					toRelease_down_1=1;
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					break;
+			}
+		}
+		else {	/* button released */
+			if(toRelease_down_1){
+				//add code to manage release.
+				toRelease_down_1=0;
+			}			
+			down_1=0;	
+			NVIC_EnableIRQ(EINT1_IRQn);							 			 /* disable Button interrupts			*/
+			LPC_PINCON->PINSEL4    |= (1 << 22);     			 /* External interrupt 0 pin selection   */
+		}
+	}	// end KEY1
+	
+	///////////////////////////////////////////////////////////////////
+	
+	/* KEY2 */
+
+	if(down_2 !=0) {			/* KEY2 */
+		down_2++;
+		if((LPC_GPIO2->FIOPIN & (1<<12)) == 0){ /* button premuto */
+			switch(down_2){
+				case 2:
+					// short press
+					// your code here
+					toRelease_down_2=1;
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					break;
+			}
+		}
+		else {	/* button released */
+			if(toRelease_down_2){
+				//add code to manage release.
+				toRelease_down_2=0;
+			}	
+			down_2=0;		
+			NVIC_EnableIRQ(EINT2_IRQn);							 			 /* disable Button interrupts			*/
+			LPC_PINCON->PINSEL4    |= (1 << 24);     			 /* External interrupt 0 pin selection  */
+		}
+	}	// end KEY2
+	
+	///////////////////////////////////////////////////////////////////
+	
+	/* Joystick UP */
+	
+	if((LPC_GPIO1->FIOPIN & (1<<29)) == 0) {		/* Joystick UP */
+		/* Joytick UP pressed */
+		J_up++;
+		switch(J_up){
+			case 1:				
+ 				// short press
+			  // your code		
+				
+				break;
+			case long_press_count_1:
+				// your code here (for long press)
+				break;
+			default:
+				// potential other code here
+				break;
+		}
+	}
+	else {
+		J_up=0;
+	}	// end Joystick UP
+	
+	///////////////////////////////////////////////////////////////////
+	
+	/* Joystick DOWN */
+	
+	if((LPC_GPIO1->FIOPIN & (1<<26)) == 0) {		/* Joystick DOWN */
+		/* Joytick DOWN pressed */
+		J_down++;
+		switch(J_down){
+			case 1:				
+				//short press
+				//your code
+				break;
+			case long_press_count_1:
+				// your code here (for long press)
+				break;
+			default:
+				// potential other code here
+				break;
+		}
+	}
+	else{
+		J_down=0;
+	}	// end Joystick DOWN
+
+	///////////////////////////////////////////////////////////////////
+	
+	/* Joystick RIGHT */
+
+	if((LPC_GPIO1->FIOPIN & (1<<28)) == 0) {		/* Joystick RIGHT */
+		/* Joytick RIGHT pressed */
+		J_right++;
+		switch(J_right){
+			case 1:				
+			  //short press
+				//your code	
+				break;
+			case long_press_count_1:
+				// your code here (for long press)
+				break;
+			default:
+				// potential other code here
+				break;
+		}
+	}
+	else {
+		J_right=0;
+	}	// end Joystick RIGHT
+	
+	///////////////////////////////////////////////////////////////////
+	
+	/* Joystick LEFT */
+
+	if((LPC_GPIO1->FIOPIN & (1<<27)) == 0) {		/* Joystick LEFT */
+		/* Joytick LEFT pressed */
+		J_left++;
+		switch(J_left){
+			case 1:				
+			  //short press
+				//your code	
+				break;
+			case long_press_count_1:
+				// your code here (for long press)
+				break;
+			default:
+				// potential other code here
+				break;
+		}
+	}
+	else {
+		J_left=0;
+	}	// end Joystick LEFT
+	
+		///////////////////////////////////////////////////////////////////
+		
+		/* Joystick CLICK */
+
+		if((LPC_GPIO1->FIOPIN & (1<<25)) == 0) {		/* Joystick CLICK */
+			/* Joytick CLICK pressed */
+			J_click++;
+			switch(J_click){
+				case 1:
+					//short press
+					// your code here
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					// potential other code here
+					break;
+			}
+		}
+		else {
+			J_click=0;
+		}	// end Joystick CLICK
+		
+		///////////////////////////////////////////////////////////////////
+		
+		/*Joystick UP-LEFT*/
+		if(((LPC_GPIO1->FIOPIN & (1<<27)) == 0) && ((LPC_GPIO1->FIOPIN & (1<<29)) == 0)) {		/* Joystick UP-LEFT */
+			/* Joytick UP-LEFT pressed */
+			J_up_left++;
+			switch(J_up_left){
+				case 1:				
+					//short press
+					//your code	
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					// potential other code here
+					break;
+			}
+		}
+		else {
+			J_up_left=0;
+		}	// end Joystick UP-LEFT
+		
+		///////////////////////////////////////////////////////////////////
+		
+		/*Joystick UP-RIGHT*/
+		if(((LPC_GPIO1->FIOPIN & (1<<27)) == 0) && ((LPC_GPIO1->FIOPIN & (1<<28)) == 0)) {		/* Joystick UP-RIGHT*/
+			/* Joytick UP-RIGHT pressed */
+			J_up_right++;
+			switch(J_up_right){
+				case 1:				
+					//short press
+					//your code	
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					// J_uppotential other code here
+					break;
+			}
+		}
+		else {
+			J_up_right=0;
+		}	// end Joystick UP-RIGHT
+		
+		///////////////////////////////////////////////////////////////////
+		
+		/*Joystick DOWN-LEFT*/
+		if(((LPC_GPIO1->FIOPIN & (1<<26)) == 0) && ((LPC_GPIO1->FIOPIN & (1<<29)) == 0)) {		/* Joystick DOWN-LEFT */
+			/* Joytick DOWN-LEFT pressed */
+			J_down_left++;
+			switch(J_down_left){
+				case 1:				
+					//short press
+					//your code	
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					// potential other code here
+					break;
+			}
+		}
+		else {
+			J_down_left=0;
+		}	// end Joystick DOWN-LEFT
+		
+		///////////////////////////////////////////////////////////////////
+		
+		/*Joystick DOWN-RIGHT*/
+		if(((LPC_GPIO1->FIOPIN & (1<<26)) == 0) && ((LPC_GPIO1->FIOPIN & (1<<28)) == 0)) {		/* Joystick DOWN-RIGHT */
+			/* Joytick DOWN-RIGHT pressed */
+			J_down_right++;
+			switch(J_down_right){
+				case 1:				
+					//short press
+					//your code	
+					break;
+				case long_press_count_1:
+					// your code here (for long press)
+					break;
+				default:
+					// potential other code here
+					break;
+			}
+		}
+		else {
+			J_down_right=0;
+		}	// end Joystick DOWN-RIGHT
+	
+		//reset_RIT(); se ci sono cose strane come il rit che si ferma
+		LPC_RIT->RICTRL |= 0x1;	/* clear interrupt flag */
+	
+		return;
+}
+```
+
+
+### Retrieve RIT Counter value
+#### File:  `lib_RIT.c` 
+```c
+unsigned int get_RIT_value() {
+	return LPC_RIT->RICOUNTER;
+}
+```
 
 ## JOYSTICK 
 In `sample.c` you have to call the function to set both joystick and RIT timer:
@@ -1071,6 +1695,32 @@ In `sample.c` you have to call:
 ```c
 LCD_Initialization();	
 ```
+### LCD Useful functions
+Here are some useful LCD functions/tricks:
+```c
+LCD_Initialization();
+	
+  TP_Init();
+  TouchPanel_Calibrate();
+  LCD_Clear(Black);
+  GUI_Text(0, 280, (uint8_t *) " touch here : 1 sec to clear  ", Red, White);
+  
+  // Useful functions
+  uint16_t x0, y0, x1, y1;
+  uint16_t color = White;
+  LCD_DrawLine(x0, y0, x1, y1, color);
+  LCD_SetPoint(x0, y0, color);
+  PutChar(x0, y0, x1, y1, 'a', White, Black);
+  
+  // To read touch position
+  // the `display` and `matrix` variables come from "../TouchPanel/TouchPanel.h" 
+  if (getDisplayPoint(&display, Read_Ads7846(), &matrix)) {
+    if(display.y < 280){
+      // ...
+    }
+  }
+```
+
 #### File `GCLD.c`
 
 **Notice that LCD uses the same GPIO Pins as LEDs (P2.0 up to 2.7) so when using the LCD some leds will randomly be switched on!**
